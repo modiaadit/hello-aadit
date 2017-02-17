@@ -1,0 +1,161 @@
+
+#include <stdlib.h>
+#include <stdio.h>
+
+#define START_MARKER_0    0x21
+#define START_MARKER_1    0x22 
+#define length_of_payload
+#define payload
+
+
+typedef enum {
+    NUMERROR = 0,
+    Gen_Error_PARAM = -1
+} num_error1;
+
+
+
+typedef enum {
+
+	MSG_READING,              // Reading the message
+    MSG_OUTPUT,               // output message
+    SEARCH,               // Data
+    MARKER_0,                // start marker 0
+    MARKER_1,                // start marker 1
+    MSG_SIZE,                // msg size 
+ 
+} terminate_state;
+
+typedef struct {
+    uint8_t size;
+    uint8_t data[256];
+} last_message;
+
+
+
+
+static int
+make(char *module)
+{
+    printf("Usage: %s [OPTIONS]\n", module);
+    printf("\n");
+    printf("  -h|-?  Print/exit.\n");
+    printf("\n");
+    printf("he program should read from stdin and write to stdout in the formats \n");
+    printf("Status or debugging messages may be reported on stderr.\n");
+    printf("There are no restrictions on the format of the status/debug messages.\n");
+    printf("Messages consist of a header and a /variable/ length payload. Any data that does not conform to the message format should be discarded.\n");
+    printf("The payload is an array of bytes, and may contain any 8-bit byte (0-255). No escaping is performed.\n");
+
+    exit(EXIT_SUCCESS);
+}
+
+
+num_error1
+print_msg(FILE *stream, const last_message *msg) {
+    if (!stream || !msg) {
+        return Gen_Error_PARAM;
+    }
+
+    fprintf(stream, "{%4d}", msg->size);
+    for (uint8_t i = 0; i < msg->size; i++) {
+        fprintf(stream, " %02X", msg->data[i]);
+    }
+    fprintf(stream, "\n");
+    
+    return NUMERROR;
+}
+
+
+num_error1
+init_msg(last_message *msg) {
+    if (!msg) {
+        return Gen_Error_PARAM;
+    }
+
+    msg->size = 0;
+
+    return NUMERROR;
+}
+
+int main (int argc, char ** argv) {
+
+    int opt;
+
+    while ((opt = getopt (argc, argv, "?ab")) != -1) {
+        switch (opt) {
+        case 'a':
+        case '?':
+            make(argv[0]);
+            break;
+        }
+    }
+
+  
+    terminate_state read_state = SEARCH;
+    last_message    this_msg;
+    uint8_t  msg_cnt = 0;
+    uint32_t msg_search_cnt = 0;
+
+    int c = getchar();
+    while (c != EOF) {
+        switch (read_state) {
+            case SEARCH:
+                if (c == START_MARKER_0) {
+                    read_state = MARKER_0;
+                } else {
+                    msg_search_cnt++;
+                }
+                break;
+            case MARKER_0:
+                if (c == START_MARKER_1) {
+                    read_state = MARKER_1;
+                } else {
+                    read_state = SEARCH;
+                }
+                break;
+            case MARKER_1:
+                
+               read_state = MSG_READING;
+                
+                init_msg(&this_msg);
+                this_msg.size = (uint8_t)c;
+                msg_cnt = 0;
+                
+               
+                
+                if (this_msg.size == 0) { // defining size to be zero
+                    read_state = MSG_OUTPUT;
+                    continue;
+                }
+                break;
+            case MSG_SIZE:
+                break;
+            case MSG_READING:
+                this_msg.data[msg_cnt] = (uint8_t)c;
+                msg_cnt++;
+                
+                
+                if (msg_cnt >= this_msg.size) {
+                    read_state = MSG_OUTPUT;
+                    continue;
+                }
+                break;
+            case MSG_OUTPUT:
+                print_msg(stdout, &this_msg);
+                read_state = SEARCH;
+                msg_search_cnt = 0;
+                break;
+            default:
+                fprintf(stderr, "Invalid: %d\n", read_state);
+        }
+
+        c = getchar();
+    }
+
+	if (ferror(stdin)) {
+        fprintf(stderr, "Error\n");
+	}
+
+    return 0;
+}
